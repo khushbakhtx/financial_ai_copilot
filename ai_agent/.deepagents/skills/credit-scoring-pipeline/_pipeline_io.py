@@ -98,3 +98,56 @@ def gfs_list(investigation_id: str, mongodb_uri: str, db_name: str) -> list:
              for f in fs.find({"investigation_id": investigation_id})]
     db.client.close()
     return names
+
+
+def publish_artifact(local_path, investigation_id, mongodb_uri, db_name,
+                     kind="file", title="", step=""):
+    """Upload a produced artifact (png chart, model .pkl, report, ...) to GridFS
+    so the UI Artifacts panel can list, preview and download it.
+
+    kind: "image" | "model" | "report" | "data" | "code" | "file"
+    Returns the gridfs id string, or None if the file is missing / upload fails.
+    """
+    import mimetypes
+    from datetime import datetime
+    from pathlib import Path
+
+    p = Path(local_path)
+    if not p.exists():
+        print(f"[artifact] skipped (missing): {local_path}")
+        return None
+    try:
+        import gridfs
+        from pymongo import MongoClient
+
+        data = p.read_bytes()
+        content_type = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+        client = MongoClient(mongodb_uri, serverSelectionTimeoutMS=5000)
+        db = client[db_name]
+        fs = gridfs.GridFS(db, collection="artifact_files")
+        filename = f"{investigation_id}/{p.name}"
+        for old in fs.find({"filename": filename}):
+            fs.delete(old._id)
+        file_id = fs.put(data, filename=filename, content_type=content_type,
+                         investigation_id=investigation_id)
+        meta = {
+            "gridfs_id": str(file_id),
+            "investigation_id": investigation_id,
+            "name": p.name,
+            "title": title or p.name,
+            "kind": kind,
+            "step": step,
+            "content_type": content_type,
+            "size_bytes": len(data),
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        db["artifacts"].update_one(
+            {"investigation_id": investigation_id, "name": p.name},
+            {"$set": meta}, upsert=True,
+        )
+        client.close()
+        print(f"[artifact] published: {p.name} ({len(data)//1024} KB, kind={kind})")
+        return str(file_id)
+    except Exception as e:
+        print(f"[artifact] publish failed for {p.name}: {e}")
+        return None

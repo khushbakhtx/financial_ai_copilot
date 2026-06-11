@@ -33,6 +33,8 @@ from fin_agent.tools import (
     save_to_memory,
     search_memory,
     save_report,
+    publish_artifact,
+    sync_artifacts_panel,
     update_pipeline_step_status,
     push_model_leaderboard,
     set_investigation_context,
@@ -49,6 +51,10 @@ current_date = datetime.now().strftime("%Y-%m-%d")
 model = ChatGoogleGenerativeAI(
     model="gemini-3-flash-preview",
     temperature=0.0,
+    # "low" cuts time-to-first-token by several seconds. The orchestrator's
+    # decisions (which pipeline script to call next) don't need deep thinking —
+    # all ML logic lives in pre-written validated scripts.
+    thinking_level="low",
 )
 
 # ── All tools given directly to the orchestrator ──────────────────────────────
@@ -80,6 +86,9 @@ all_tools = [
     search_memory,
     # Reports
     save_report,
+    # Artifacts (charts, models — downloadable in UI)
+    publish_artifact,
+    sync_artifacts_panel,
     # Live UI sync (updates stream.values → frontend panels update in real-time)
     set_investigation_context,
     update_pipeline_step_status,
@@ -91,10 +100,13 @@ all_tools = [
 
 FULL_PROMPT = ORCHESTRATOR_INSTRUCTIONS + f"\n\nToday's date: {current_date}"
 
+from fin_agent.middleware import FinancialStateMiddleware
+
 agent = create_deep_agent(
     model=model,
     tools=all_tools,
     system_prompt=FULL_PROMPT,
+    middleware=[FinancialStateMiddleware()],
     subagents=[],
     backend=FilesystemBackend(root_dir=_AGENT_DIR),
     skills=[".deepagents/skills"],

@@ -139,15 +139,37 @@ async def _finalize_snapshot(thread_id: str, graph: Any, lg_config: dict) -> Non
 # Stream
 # ---------------------------------------------------------------------------
 
+# In-memory assistant cache — assistant rows never change during a server's
+# lifetime (seeded at startup), so skip the Atlas round-trip on every run.
+_ASSISTANT_CACHE: dict[str, dict] = {}
+
+
+async def _cached_assistant(assistant_id: str) -> Optional[dict]:
+    row = _ASSISTANT_CACHE.get(assistant_id)
+    if row is not None:
+        return row
+    row = await db.get_assistant(assistant_id)
+    if not row:
+        row = await db.get_assistant_by_graph(assistant_id)
+    if row:
+        _ASSISTANT_CACHE[assistant_id] = row
+    return row
+
+
 @router.post("/stream")
 async def stream_run(thread_id: str, body: RunCreateStreamingStateful):
-    # One round-trip: get thread (needed for existence check + multitask)
-    thread = await db.get_thread(thread_id)
+    # Both lookups hit Atlas — run them concurrently instead of sequentially
+    thread, assistant_row = await asyncio.gather(
+        db.get_thread(thread_id),
+        _cached_assistant(body.assistant_id),
+    )
     if not thread:
         if body.if_not_exists == "create":
             thread = await db.create_thread(thread_id=thread_id, if_exists="do_nothing")
         if not thread:
             raise HTTPException(status_code=404, detail="Thread not found")
+    if not assistant_row:
+        raise HTTPException(status_code=404, detail=f"Assistant not found: {body.assistant_id}")
 
     # Multitask strategy enforcement (reuse thread fetched above — no extra round-trip)
     if thread.get("status") == "busy":
@@ -162,34 +184,29 @@ async def stream_run(thread_id: str, body: RunCreateStreamingStateful):
                     await db.update_run_status(r["run_id"], "interrupted")
                     break
 
-    # One round-trip: resolve assistant (get graph + assistant_id in one query)
-    assistant_row = await db.get_assistant(body.assistant_id)
-    if not assistant_row:
-        assistant_row = await db.get_assistant_by_graph(body.assistant_id)
-    if not assistant_row:
-        raise HTTPException(status_code=404, detail=f"Assistant not found: {body.assistant_id}")
     try:
         graph = get_graph(assistant_row["graph_id"])
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     assistant_id = assistant_row["assistant_id"]
 
-    # One round-trip: create run + set thread busy atomically
-    run = await db.create_run_and_set_busy(
+    # Generate run_id locally; insert the run row in the background so the
+    # graph starts immediately instead of waiting ~1s for the Atlas write.
+    run_id = str(uuid.uuid4())
+    asyncio.create_task(db.create_run_and_set_busy(
         thread_id=thread_id,
         assistant_id=assistant_id,
         metadata=body.metadata,
         kwargs={"stream_mode": body.stream_mode},
         multitask_strategy=body.multitask_strategy,
-    )
-    run_id = run["run_id"]
+        run_id=run_id,
+        status="running",
+    ))
     stream_modes = _normalize_modes(body.stream_mode)
     input_data = _build_input(body)
     lg_config = _build_lg_config(thread_id, body)
 
     async def generate():
-        # Fire-and-forget status update — don't block first SSE event on Atlas round-trip
-        asyncio.create_task(db.update_run_status(run_id, "running"))
         try:
             async for chunk in stream_graph(
                 graph, input_data, lg_config, stream_modes,

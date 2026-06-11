@@ -176,6 +176,52 @@ else:
     scores_path = str(ARTIFACT_DIR / "fraud_scores.parquet")
     scores_df.to_parquet(scores_path, index=False)
 
+# ── Charts + artifact publishing ──────────────────────────────────────────────
+
+from _pipeline_io import publish_artifact
+
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    # Feature importance of the fraud model (if available)
+    est = best_model
+    imp = getattr(est, "feature_importances_", None)
+    if imp is not None and len(imp) == len(feature_cols):
+        import numpy as _np
+        order = _np.argsort(imp)[::-1][:20]
+        fig, ax = plt.subplots(figsize=(8, max(4, 0.35 * len(order))))
+        ax.barh([feature_cols[i] for i in order][::-1], _np.asarray(imp)[order][::-1], color="#7A4B5A")
+        ax.set_title(f"Fraud Model Feature Importance — {best['model']} (top {len(order)})")
+        ax.set_xlabel("Importance")
+        fig.tight_layout()
+        fi_path = ARTIFACT_DIR / "fraud_feature_importance.png"
+        fig.savefig(fi_path, dpi=130)
+        plt.close(fig)
+        publish_artifact(fi_path, INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                         kind="image", title="Fraud Feature Importance", step="05_model")
+
+    # Fraud score distribution
+    score_col = "predict_proba" if "predict_proba" in scores_df.columns else (
+        "anomaly_score" if "anomaly_score" in scores_df.columns else None)
+    if score_col:
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.hist(scores_df[score_col], bins=50, color="#7A4B5A", alpha=0.8)
+        ax.set_title(f"Fraud Score Distribution ({mode})")
+        ax.set_xlabel(score_col)
+        fig.tight_layout()
+        sd_path = ARTIFACT_DIR / "fraud_score_distribution.png"
+        fig.savefig(sd_path, dpi=130)
+        plt.close(fig)
+        publish_artifact(sd_path, INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                         kind="image", title="Fraud Score Distribution", step="05_model")
+except Exception as e:
+    print(f"[fraud/05_model] chart generation failed (non-fatal): {e}")
+
+publish_artifact(model_path, INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                 kind="model", title=f"Fraud model ({best['model']}, {mode})", step="05_model")
+
 # ── Persist to MongoDB ────────────────────────────────────────────────────────
 
 result = {

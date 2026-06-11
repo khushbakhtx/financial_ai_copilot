@@ -363,6 +363,20 @@ if MONGODB_URI:
     except Exception as e:
         print(f"[07_export_artifacts] WARNING: MongoDB write failed: {e}")
 
+# ── Publish all export artifacts to GridFS for UI download ───────────────────
+
+from _pipeline_io import publish_artifact
+
+publish_artifact(ARTIFACT_DIR / "model.pkl", INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                 kind="model", title=f"Production model ({model_name} {model_version})",
+                 step="07_export_artifacts")
+publish_artifact(ARTIFACT_DIR / "input_schema.json", INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                 kind="data", title="Input schema", step="07_export_artifacts")
+publish_artifact(ARTIFACT_DIR / "example_usage.py", INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                 kind="code", title="Example scoring script", step="07_export_artifacts")
+publish_artifact(ARTIFACT_DIR / "model_card.md", INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                 kind="report", title="Model card", step="07_export_artifacts")
+
 print("\n" + "="*60)
 print("EXPORT SUMMARY")
 print("="*60)

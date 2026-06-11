@@ -65,6 +65,9 @@ class FinancialCopilotState(MessagesState):
     # ── File artifacts (save_report writes here) ──────────────────────────
     files: Dict[str, str]
 
+    # ── Downloadable artifacts (charts, models — publish_artifact/sync) ───
+    artifacts: List[Dict[str, Any]]
+
     # ── Todos (orchestrator task tracking, also shown in UI) ──────────────
     todos: List[Any]
 

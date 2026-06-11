@@ -294,6 +294,39 @@ if MONGODB_URI:
 else:
     print("[01_eda] WARNING: MONGODB_URI not set — results not persisted to MongoDB")
 
+# ── 8b. Charts: target balance + quick feature importance ────────────────────
+
+try:
+    import sys as _sys
+    from pathlib import Path as _P
+    _sys.path.insert(0, str(_P(__file__).parent))
+    from _pipeline_io import publish_artifact
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    _artifact_dir = _P(f"/tmp/financial_ai/artifacts/{INVESTIGATION_ID}")
+    _artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+    axes[0].bar(["negative", "positive"], [n_neg, n_pos], color=["#9DB8B3", "#2F6868"])
+    axes[0].set_title(f"Target Balance — '{TARGET_COL}' ({target_rate:.2%} positive)")
+    for i, v in enumerate([n_neg, n_pos]):
+        axes[0].text(i, v, f"{v:,}", ha="center", va="bottom", fontsize=9)
+
+    _top_imp = importance_df.head(15).iloc[::-1]
+    axes[1].barh(_top_imp["feature"], _top_imp["importance"], color="#2F6868")
+    axes[1].set_title("Quick Feature Importance (top 15)")
+    fig.tight_layout()
+    _eda_chart = _artifact_dir / "eda_overview.png"
+    fig.savefig(_eda_chart, dpi=130)
+    plt.close(fig)
+    publish_artifact(_eda_chart, INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                     kind="image", title="EDA Overview", step="01_eda")
+except Exception as e:
+    print(f"[01_eda] chart generation failed (non-fatal): {e}")
+
 # ── 9. Print summary ──────────────────────────────────────────────────────────
 
 print("\n" + "="*60)

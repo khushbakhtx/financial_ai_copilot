@@ -341,16 +341,18 @@ async def create_run(
     metadata: dict = {},
     kwargs: dict = {},
     multitask_strategy: str = "reject",
+    run_id: Optional[str] = None,
+    status: str = "pending",
 ) -> dict[str, Any]:
     db = get_db()
     doc = {
-        "run_id": str(_uuid_mod.uuid4()),
+        "run_id": run_id or str(_uuid_mod.uuid4()),
         "thread_id": thread_id,
         "assistant_id": assistant_id,
         "metadata": metadata,
         "kwargs": kwargs,
         "multitask_strategy": multitask_strategy,
-        "status": "pending",
+        "status": status,
         "created_at": _now(),
         "updated_at": _now(),
     }
@@ -364,8 +366,13 @@ async def create_run_and_set_busy(
     metadata: dict = {},
     kwargs: dict = {},
     multitask_strategy: str = "reject",
+    run_id: Optional[str] = None,
+    status: str = "pending",
 ) -> dict[str, Any]:
-    run = await create_run(thread_id, assistant_id, metadata, kwargs, multitask_strategy)
+    run = await create_run(
+        thread_id, assistant_id, metadata, kwargs, multitask_strategy,
+        run_id=run_id, status=status,
+    )
     await set_thread_status(thread_id, "busy")
     return run
 

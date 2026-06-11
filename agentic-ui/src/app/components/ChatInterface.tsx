@@ -21,7 +21,9 @@ import {
   Trophy,
   BarChart2,
   Terminal,
+  PackageOpen,
 } from "lucide-react";
+import { ArtifactsPanel } from "@/app/components/genui/ArtifactsPanel";
 import { ChatMessage } from "@/app/components/ChatMessage";
 import type {
   TodoItem,
@@ -73,7 +75,7 @@ const getStatusIcon = (status: TodoItem["status"], className?: string) => {
 };
 
 export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
-  const [metaOpen, setMetaOpen] = useState<"tasks" | "files" | "pipeline" | "models" | "charts" | "terminal" | null>(null);
+  const [metaOpen, setMetaOpen] = useState<"tasks" | "files" | "pipeline" | "models" | "charts" | "artifacts" | "terminal" | null>(null);
   const tasksContainerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -96,6 +98,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
     sendMessage,
     stopStream,
     resumeInterrupt,
+    artifacts,
   } = useChatContext();
 
   const { pipelinePanel, leaderboardPanel, chartsPanel } = useFinancialCopilot();
@@ -103,6 +106,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
   const hasPipeline = pipelinePanel !== null;
   const hasModels = leaderboardPanel !== null;
   const hasCharts = chartsPanel !== null;
+  const hasArtifacts = artifacts.length > 0;
 
   const [threadId] = useQueryState("threadId");
 
@@ -261,7 +265,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
           className="mx-auto w-full max-w-[1024px] px-6 pb-6 pt-4"
           ref={contentRef}
         >
-          {isThreadLoading ? (
+          {isThreadLoading && !isLoading ? (
             <div className="flex items-center justify-center p-8">
               <p className="text-muted-foreground">Loading...</p>
             </div>
@@ -293,6 +297,21 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
                   />
                 );
               })}
+              {isActuallyRunning &&
+                (processedMessages.length === 0 ||
+                  processedMessages[processedMessages.length - 1]?.message
+                    .type === "human") && (
+                  <div className="flex items-start gap-3 py-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                      <span className="text-xs font-semibold text-primary">AI</span>
+                    </div>
+                    <div className="flex items-center gap-1 rounded-xl bg-muted px-4 py-3">
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
+                      <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
+                    </div>
+                  </div>
+                )}
             </>
           )}
         </div>
@@ -305,7 +324,7 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
             "mx-auto w-[calc(100%-32px)] max-w-[1024px] transition-colors duration-200 ease-in-out"
           )}
         >
-          {(hasTasks || hasFiles || hasPipeline || hasModels || hasCharts) && (
+          {(hasTasks || hasFiles || hasPipeline || hasModels || hasCharts || hasArtifacts) && (
             <div className="flex max-h-72 flex-col overflow-y-auto border-b border-border bg-sidebar empty:hidden">
               {!metaOpen && (
                 <>
@@ -446,6 +465,19 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
                             Charts
                           </button>
                         )}
+                        {hasArtifacts && (
+                          <button
+                            type="button"
+                            onClick={() => setMetaOpen("artifacts")}
+                            className="flex flex-shrink-0 cursor-pointer items-center gap-1.5 px-3 py-3 text-left text-sm text-muted-foreground hover:text-foreground"
+                          >
+                            <PackageOpen size={14} />
+                            Artifacts
+                            <span className="h-4 min-w-4 rounded-full bg-[#2F6868] px-0.5 text-center text-[10px] leading-[16px] text-white">
+                              {artifacts.length}
+                            </span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setMetaOpen("terminal")}
@@ -527,6 +559,20 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
                         Charts
                       </button>
                     )}
+                    {hasArtifacts && (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 py-3 pr-4 first:pl-[18px] aria-expanded:font-semibold"
+                        onClick={() => setMetaOpen((prev) => prev === "artifacts" ? null : "artifacts")}
+                        aria-expanded={metaOpen === "artifacts"}
+                      >
+                        <PackageOpen size={13} />
+                        Artifacts
+                        <span className="h-4 min-w-4 rounded-full bg-[#2F6868] px-0.5 text-center text-[10px] leading-[16px] text-white">
+                          {artifacts.length}
+                        </span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="inline-flex items-center gap-1.5 py-3 pr-4 first:pl-[18px] aria-expanded:font-semibold"
@@ -601,6 +647,12 @@ export const ChatInterface = React.memo<ChatInterfaceProps>(({ assistant }) => {
                   {metaOpen === "charts" && (
                     <div className="p-4 overflow-y-auto">
                       {chartsPanel}
+                    </div>
+                  )}
+
+                  {metaOpen === "artifacts" && (
+                    <div className="overflow-y-auto">
+                      <ArtifactsPanel artifacts={artifacts} />
                     </div>
                   )}
 

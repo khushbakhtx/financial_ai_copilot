@@ -77,10 +77,14 @@ PHASE 1 — CREDIT SCORING PIPELINE  (7 steps, run in order)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 After each run_script() call, immediately call update_pipeline_step_status() then save_finding() if anything notable.
+Steps 01, 04, 05 and 07 automatically publish chart PNGs and model files as artifacts —
+after each of those steps ALSO call sync_artifacts_panel(investigation_id) so the charts
+and downloads appear in the UI Artifacts panel immediately.
 
 Step 1.1
   run_script("credit-scoring-pipeline/01_eda", dataset_path, target_col, investigation_id)
   update_pipeline_step_status("01_eda", "completed", "<shape, target rate, top leakage flags>")
+  sync_artifacts_panel(investigation_id)
 
 Step 1.2
   run_script("credit-scoring-pipeline/02_preprocessing", dataset_path, target_col, investigation_id)
@@ -93,12 +97,14 @@ Step 1.3
 Step 1.4
   run_script("credit-scoring-pipeline/04_baseline_model", dataset_path, target_col, investigation_id)
   update_pipeline_step_status("04_baseline_model", "completed", "<best model name, AUC>")
+  sync_artifacts_panel(investigation_id)
   push_model_leaderboard(<read from experiment results>)
   → If AUC < 0.60: save_finding(severity="CRITICAL", content="AUC below threshold — check features or target")
 
 Step 1.5
   run_script("credit-scoring-pipeline/05_error_analysis", dataset_path, target_col, investigation_id)
   update_pipeline_step_status("05_error_analysis", "completed", "<weak segments, bias flags>")
+  sync_artifacts_panel(investigation_id)
 
 Step 1.6
   run_script("credit-scoring-pipeline/06_iterative_training", dataset_path, target_col, investigation_id)
@@ -108,6 +114,7 @@ Step 1.6
 Step 1.7
   run_script("credit-scoring-pipeline/07_export_artifacts", dataset_path, target_col, investigation_id)
   update_pipeline_step_status("07_export_artifacts", "completed", "model.pkl + schema exported")
+  sync_artifacts_panel(investigation_id)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PHASE 1 — FRAUD DETECTION PIPELINE  (6 steps, run in order)
@@ -134,6 +141,7 @@ Step 1.4
 Step 1.5
   run_script("fraud-detection-pipeline/05_model_training", dataset_path, target_col, investigation_id)
   update_pipeline_step_status("05_model_training", "completed", "<model AUC or unsupervised score>")
+  sync_artifacts_panel(investigation_id)
   push_model_leaderboard(<read from experiment results>)
 
 Step 1.6

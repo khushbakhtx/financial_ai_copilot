@@ -139,8 +139,12 @@ async def stream_graph(
         if stream_subgraphs:
             if isinstance(modes, list):
                 # multi-mode + subgraphs → 3-tuple (namespace, mode, chunk)
+                # durability="async": checkpoint writes to Atlas happen in the
+                # background instead of blocking each super-step (~300-500 ms
+                # saved per node against a remote cluster).
                 async for namespace, mode, chunk in graph.astream(
-                    input_data, config=config, stream_mode=modes, subgraphs=True
+                    input_data, config=config, stream_mode=modes, subgraphs=True,
+                    durability="async",
                 ):
                     # Skip subgraph-level values events — only root graph values
                     # should update stream.values on the frontend
@@ -155,7 +159,8 @@ async def stream_graph(
             else:
                 # single-mode + subgraphs → 2-tuple (namespace, chunk)
                 async for namespace, chunk in graph.astream(
-                    input_data, config=config, stream_mode=modes, subgraphs=True
+                    input_data, config=config, stream_mode=modes, subgraphs=True,
+                    durability="async",
                 ):
                     if modes == "values" and namespace:
                         continue
@@ -165,10 +170,14 @@ async def stream_graph(
                     yield _sse(_sse_event_name(modes, namespace if modes != "updates" else None), chunk)
         else:
             if isinstance(modes, list):
-                async for mode, chunk in graph.astream(input_data, config=config, stream_mode=modes):
+                async for mode, chunk in graph.astream(
+                    input_data, config=config, stream_mode=modes, durability="async"
+                ):
                     yield _sse(_sse_event_name(mode), chunk)
             else:
-                async for chunk in graph.astream(input_data, config=config, stream_mode=modes):
+                async for chunk in graph.astream(
+                    input_data, config=config, stream_mode=modes, durability="async"
+                ):
                     yield _sse(_sse_event_name(modes), chunk)
 
     except Exception as exc:

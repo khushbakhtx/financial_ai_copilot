@@ -30,10 +30,23 @@ export interface ModelEntry {
   rank?: number;
 }
 
+export interface ArtifactMeta {
+  gridfs_id: string;
+  investigation_id?: string;
+  name: string;
+  title?: string;
+  kind?: string;
+  step?: string;
+  content_type?: string;
+  size_bytes?: number;
+  created_at?: string;
+}
+
 export type StateType = {
   messages: Message[];
   todos: TodoItem[];
   files: Record<string, string>;
+  artifacts?: ArtifactMeta[];
   email?: {
     id?: string;
     subject?: string;
@@ -224,7 +237,7 @@ export function useChat({
           }),
           config: {
             ...(activeAssistant?.config ?? {}),
-            recursion_limit: 100,
+            recursion_limit: 300,
           },
           streamSubgraphs: true,
         }
@@ -283,7 +296,7 @@ export function useChat({
       stream.submit(undefined, {
         config: {
           ...(activeAssistant?.config || {}),
-          recursion_limit: 100,
+          recursion_limit: 300,
         },
         ...(hasTaskToolCall
           ? { interruptAfter: ["tools"] }
@@ -308,7 +321,7 @@ export function useChat({
         command: { resume: value },
         config: {
           ...(activeAssistant?.config || {}),
-          recursion_limit: 100,
+          recursion_limit: 300,
         },
       });
       // Update thread list when resuming from interrupt
@@ -351,6 +364,7 @@ export function useChat({
     markCurrentThreadAsResolved,
     resumeInterrupt,
     // Financial copilot state — read directly from stream.values
+    artifacts: stream.values.artifacts ?? [],
     investigationId: stream.values.investigation_id,
     datasetName: stream.values.dataset_name,
     pipelineType: stream.values.pipeline_type,

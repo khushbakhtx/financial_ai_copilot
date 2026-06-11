@@ -688,6 +688,139 @@ def save_report(
 
 
 # ============================================================
+# ARTIFACT TOOLS (downloadable files + chart previews in UI)
+# ============================================================
+
+def _artifact_store():
+    """Return (db, GridFS bucket for artifact_files) or (None, None)."""
+    try:
+        import gridfs
+        from fin_agent.memory import _get_client
+
+        client = _get_client()
+        if client is None:
+            return None, None
+        db = client[os.getenv("MONGODB_DB", "financial_ai_copilot")]
+        return db, gridfs.GridFS(db, collection="artifact_files")
+    except Exception:
+        return None, None
+
+
+def _list_artifact_meta(investigation_id: str = "") -> list[dict]:
+    db, _ = _artifact_store()
+    if db is None:
+        return []
+    query = {"investigation_id": investigation_id} if investigation_id else {}
+    return list(db["artifacts"].find(query, {"_id": 0}).sort("created_at", -1).limit(100))
+
+
+@tool(parse_docstring=True)
+def publish_artifact(
+    file_path: str,
+    title: str = "",
+    kind: str = "file",
+    investigation_id: str = "",
+    tool_call_id: Annotated[str, InjectedToolArg] = "",
+) -> Union[Command, str]:
+    """Publish a file produced during the investigation so the user can preview
+    and download it from the UI Artifacts panel.
+
+    Use this for any file created with run_code (charts saved as .png, exported
+    CSVs, pickled models, reports). Pipeline scripts publish their own standard
+    artifacts automatically — call sync_artifacts_panel after each run_script
+    instead. Files are read from local disk first, then from the E2B sandbox.
+
+    Args:
+        file_path: Absolute path of the file (e.g. '/tmp/financial_ai/artifacts/<id>/chart.png').
+        title: Human-readable title shown in the UI (defaults to filename).
+        kind: One of 'image' | 'model' | 'report' | 'data' | 'code' | 'file'.
+              Images are previewed inline; everything else gets a download button.
+        investigation_id: Investigation this artifact belongs to.
+
+    Returns:
+        Confirmation with the artifact id, and the UI Artifacts panel updates.
+    """
+    import mimetypes
+
+    p = Path(file_path)
+    data: Optional[bytes] = None
+    if p.exists():
+        data = p.read_bytes()
+    else:
+        from fin_agent.sandbox import read_sandbox_file
+        data = read_sandbox_file(file_path)
+    if data is None:
+        return f"File not found locally or in sandbox: {file_path}"
+
+    db, fs = _artifact_store()
+    if fs is None:
+        return "MongoDB not configured — cannot publish artifact."
+
+    content_type = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+    filename = f"{investigation_id}/{p.name}" if investigation_id else p.name
+    for old in fs.find({"filename": filename}):
+        fs.delete(old._id)
+    file_id = fs.put(data, filename=filename, content_type=content_type,
+                     investigation_id=investigation_id)
+    meta = {
+        "gridfs_id": str(file_id),
+        "investigation_id": investigation_id,
+        "name": p.name,
+        "title": title or p.name,
+        "kind": kind,
+        "step": "",
+        "content_type": content_type,
+        "size_bytes": len(data),
+        "created_at": datetime.now().isoformat(),
+    }
+    db["artifacts"].update_one(
+        {"investigation_id": investigation_id, "name": p.name},
+        {"$set": meta}, upsert=True,
+    )
+
+    artifacts = _list_artifact_meta(investigation_id)
+    return Command(update={
+        "artifacts": artifacts,
+        "messages": [ToolMessage(
+            content=f"Artifact published: {p.name} ({len(data) // 1024} KB, kind={kind}). "
+                    f"Artifacts panel now shows {len(artifacts)} item(s).",
+            tool_call_id=tool_call_id,
+        )],
+    })
+
+
+@tool(parse_docstring=True)
+def sync_artifacts_panel(
+    investigation_id: str,
+    tool_call_id: Annotated[str, InjectedToolArg] = "",
+) -> Union[Command, str]:
+    """Refresh the UI Artifacts panel with everything published for an investigation.
+
+    Pipeline scripts (01_eda, 04_baseline_model, 05_error_analysis,
+    07_export_artifacts, fraud 05_model) automatically publish charts and model
+    files to storage as they run. Call this after each run_script step so the
+    new charts and downloads appear in the UI immediately.
+
+    Args:
+        investigation_id: The investigation whose artifacts to display.
+
+    Returns:
+        Summary of artifacts now visible in the UI.
+    """
+    artifacts = _list_artifact_meta(investigation_id)
+    if not artifacts:
+        return f"No artifacts published yet for investigation '{investigation_id}'."
+    names = ", ".join(a["name"] for a in artifacts[:10])
+    return Command(update={
+        "artifacts": artifacts,
+        "messages": [ToolMessage(
+            content=f"Artifacts panel updated — {len(artifacts)} item(s): {names}",
+            tool_call_id=tool_call_id,
+        )],
+    })
+
+
+# ============================================================
 # COPILOTKIT STATE UPDATE TOOLS
 # These push live updates into the shared state that the frontend reads.
 # ============================================================
@@ -880,14 +1013,31 @@ def run_script(
         ds_stem = Path(dataset_path).stem if dataset_path else "investigation"
         investigation_id = f"{ds_stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-    # Build the injected header that every script can read via os.environ
+    # Shared pipeline IO module — must travel with the script because the E2B
+    # sandbox only receives the composed code, not the skill directory.
+    pipeline_io_src = ""
+    pio_path = script_path.parent / "_pipeline_io.py"
+    if pio_path.exists():
+        pipeline_io_src = pio_path.read_text(encoding="utf-8")
+
+    # Build the injected header that every script can read via os.environ.
+    # Env values are embedded literally (evaluated here on the host) — the
+    # E2B sandbox does NOT inherit the host environment, so os.getenv inside
+    # the sandbox would return ''.
     header = f"""
-import os, sys
-os.environ.setdefault('DATASET_PATH', {repr(dataset_path)})
-os.environ.setdefault('TARGET_COL', {repr(target_col)})
-os.environ.setdefault('INVESTIGATION_ID', {repr(investigation_id)})
-os.environ.setdefault('MONGODB_URI', os.getenv('MONGODB_URI', ''))
-os.environ.setdefault('GEMINI_API_KEY', os.getenv('GEMINI_API_KEY', ''))
+import os, sys, pathlib
+os.environ['DATASET_PATH'] = {repr(dataset_path)}
+os.environ['TARGET_COL'] = {repr(target_col)}
+os.environ['INVESTIGATION_ID'] = {repr(investigation_id)}
+os.environ['MONGODB_URI'] = {repr(os.getenv('MONGODB_URI', ''))}
+os.environ['MONGODB_DB'] = {repr(os.getenv('MONGODB_DB', 'financial_ai_copilot'))}
+os.environ['GEMINI_API_KEY'] = {repr(os.getenv('GEMINI_API_KEY', ''))}
+# Materialise _pipeline_io.py next to this running script so
+# `from _pipeline_io import ...` resolves inside the sandbox too.
+_pio_dir = pathlib.Path(__file__).resolve().parent
+(_pio_dir / "_pipeline_io.py").write_text({repr(pipeline_io_src)}, encoding="utf-8")
+if str(_pio_dir) not in sys.path:
+    sys.path.insert(0, str(_pio_dir))
 """
     # Parse extra_args (key=value pairs)
     for pair in extra_args.split():

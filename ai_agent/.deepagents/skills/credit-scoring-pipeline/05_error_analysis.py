@@ -272,6 +272,46 @@ if MONGODB_URI:
     except Exception as e:
         print(f"[05_error_analysis] WARNING: MongoDB write failed: {e}")
 
+# ── Charts: segment AUC gaps + score distributions ────────────────────────────
+
+from _pipeline_io import publish_artifact
+
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
+
+    # 1. Segment AUC gap — worst 12 segments
+    worst = segment_aucs[:12][::-1]
+    if worst:
+        labels = [f"{s['column']}={s['value']}"[:34] for s in worst]
+        gaps   = [s["gap"] for s in worst]
+        axes[0].barh(labels, gaps,
+                     color=["#A85751" if g < -AUC_GAP_THRESH else "#9DB8B3" for g in gaps])
+        axes[0].axvline(0, color="black", linewidth=0.8)
+        axes[0].set_title("Segment AUC Gap vs Overall (worst 12)")
+        axes[0].set_xlabel("AUC gap")
+        axes[0].tick_params(labelsize=8)
+
+    # 2. Score distributions by true class
+    axes[1].hist(y_pred_proba[y_true == 0], bins=40, alpha=0.65, label="negative", color="#9DB8B3")
+    axes[1].hist(y_pred_proba[y_true == 1], bins=40, alpha=0.65, label="positive", color="#2F6868")
+    axes[1].set_title("Predicted Score Distribution by True Class")
+    axes[1].set_xlabel("predicted probability")
+    axes[1].legend()
+
+    fig.tight_layout()
+    seg_chart = ARTIFACT_DIR / "error_analysis.png"
+    fig.savefig(seg_chart, dpi=130)
+    plt.close(fig)
+    publish_artifact(seg_chart, INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                     kind="image", title="Error & Segment Analysis", step="05_error_analysis")
+except Exception as e:
+    print(f"[05_error_analysis] chart generation failed (non-fatal): {e}")
+
 # ── Print summary ─────────────────────────────────────────────────────────────
 
 print("\n" + "="*60)

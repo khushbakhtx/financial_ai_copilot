@@ -185,6 +185,78 @@ else:
     scores_df.to_parquet(test_scores_path, index=False)
     print(f"[04_baseline_model] Saved test_scores → {test_scores_path} (local fallback)")
 
+# ── Charts: feature importance, model comparison, ROC curves ─────────────────
+
+from _pipeline_io import publish_artifact
+
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    # 1. Feature importance of the best model
+    est = best_model.named_steps["clf"] if hasattr(best_model, "named_steps") else best_model
+    imp = None
+    if hasattr(est, "feature_importances_"):
+        imp = np.asarray(est.feature_importances_, dtype=float)
+    elif hasattr(est, "coef_"):
+        imp = np.abs(np.asarray(est.coef_, dtype=float)).ravel()
+    if imp is not None and len(imp) == len(feature_cols):
+        order = np.argsort(imp)[::-1][:20]
+        fig, ax = plt.subplots(figsize=(8, max(4, 0.35 * len(order))))
+        ax.barh([feature_cols[i] for i in order][::-1], imp[order][::-1], color="#2F6868")
+        ax.set_title(f"Feature Importance — {best['model']} (top {len(order)})")
+        ax.set_xlabel("Importance")
+        fig.tight_layout()
+        fi_path = ARTIFACT_DIR / "feature_importance.png"
+        fig.savefig(fi_path, dpi=130)
+        plt.close(fig)
+        publish_artifact(fi_path, INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                         kind="image", title="Feature Importance", step="04_baseline_model")
+
+    # 2. Model comparison bar chart
+    fig, ax = plt.subplots(figsize=(7, 4))
+    names = [r["model"] for r in leaderboard][::-1]
+    aucs  = [r["test_auc"] for r in leaderboard][::-1]
+    bars = ax.barh(names, aucs, color=["#2F6868" if n == best["model"] else "#9DB8B3" for n in names])
+    ax.set_xlim(0.5, 1.0)
+    ax.set_title("Model Comparison — Test AUC")
+    ax.set_xlabel("AUC-ROC")
+    for b, v in zip(bars, aucs):
+        ax.text(v + 0.005, b.get_y() + b.get_height() / 2, f"{v:.4f}", va="center", fontsize=9)
+    fig.tight_layout()
+    mc_path = ARTIFACT_DIR / "model_comparison.png"
+    fig.savefig(mc_path, dpi=130)
+    plt.close(fig)
+    publish_artifact(mc_path, INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                     kind="image", title="Model Comparison (AUC)", step="04_baseline_model")
+
+    # 3. ROC curves of all models
+    fig, ax = plt.subplots(figsize=(6.5, 5.5))
+    for name, model in fitted_models.items():
+        proba = model.predict_proba(X_test)[:, 1]
+        fpr_c, tpr_c, _ = roc_curve(y_test, proba)
+        ax.plot(fpr_c, tpr_c, label=f"{name} (AUC={results[name]['test_auc']:.3f})",
+                linewidth=2 if name == best["model"] else 1.2)
+    ax.plot([0, 1], [0, 1], "k--", linewidth=0.8, alpha=0.5)
+    ax.set_xlabel("False Positive Rate")
+    ax.set_ylabel("True Positive Rate")
+    ax.set_title("ROC Curves — Baseline Models")
+    ax.legend(loc="lower right", fontsize=8)
+    fig.tight_layout()
+    roc_path = ARTIFACT_DIR / "roc_curves.png"
+    fig.savefig(roc_path, dpi=130)
+    plt.close(fig)
+    publish_artifact(roc_path, INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                     kind="image", title="ROC Curves", step="04_baseline_model")
+except Exception as e:
+    print(f"[04_baseline_model] chart generation failed (non-fatal): {e}")
+
+# Publish the trained model binary so it is downloadable from the UI
+publish_artifact(best_model_path, INVESTIGATION_ID, MONGODB_URI, DB_NAME,
+                 kind="model", title=f"Best baseline model ({best['model']})",
+                 step="04_baseline_model")
+
 # ── Persist to MongoDB pipeline_state + experiments ───────────────────────────
 
 result = {

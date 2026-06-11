@@ -23,7 +23,10 @@ logger = logging.getLogger(__name__)
 
 FINANCIAL_PACKAGES = (
     "pandas numpy scikit-learn xgboost lightgbm catboost "
-    "optuna shap matplotlib seaborn networkx pyod polars plotly"
+    "optuna shap matplotlib seaborn networkx pyod polars plotly "
+    # pipeline scripts persist state/artifacts to MongoDB Atlas from inside
+    # the sandbox; parquet IO for GridFS DataFrame exchange needs pyarrow
+    "'pymongo[srv]' dnspython pyarrow"
 )
 
 _PYTHON = sys.executable
@@ -125,6 +128,29 @@ def _get_or_create_sandbox(agent: str = "") -> tuple["object", _SandboxEntry]:
     _emit("system", f"[E2B] Packages installed and cached for this thread.", agent)
 
     return sbx, entry
+
+
+def read_sandbox_file(path: str) -> Optional[bytes]:
+    """Read a file from the current thread's persistent E2B sandbox.
+
+    Returns the file bytes, or None if E2B is not configured / the file is
+    missing. Used by publish_artifact to retrieve files that pipeline scripts
+    or run_code wrote inside the sandbox filesystem.
+    """
+    if not os.getenv("E2B_API_KEY"):
+        return None
+    try:
+        sbx, _ = _get_or_create_sandbox()
+        try:
+            data = sbx.files.read(path, format="bytes")
+        except TypeError:
+            data = sbx.files.read(path)
+        if isinstance(data, str):
+            data = data.encode()
+        return bytes(data) if data is not None else None
+    except Exception as e:
+        _emit("stderr", f"[E2B] read_sandbox_file failed for {path}: {e}")
+        return None
 
 
 def release_sandbox(thread_id: Optional[str] = None) -> None:

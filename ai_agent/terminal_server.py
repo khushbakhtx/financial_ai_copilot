@@ -193,6 +193,70 @@ async def list_datasets():
     return {"datasets": _list()}
 
 
+# ── Artifact endpoints (charts, models, reports produced by pipeline runs) ───
+
+def _artifacts_db():
+    """Return (db, GridFS bucket for artifact_files) or (None, None)."""
+    try:
+        import gridfs
+        from fin_agent.memory import _get_client
+
+        client = _get_client()
+        if client is None:
+            return None, None
+        db = client[os.getenv("MONGODB_DB", "financial_ai_copilot")]
+        return db, gridfs.GridFS(db, collection="artifact_files")
+    except Exception as e:
+        logger.warning("Artifact GridFS init failed: %s", e)
+        return None, None
+
+
+@app.get("/artifacts")
+async def list_artifacts(investigation_id: str = ""):
+    """Return artifact metadata, newest first. Optional investigation_id filter."""
+    db, _ = _artifacts_db()
+    if db is None:
+        return {"artifacts": []}
+    query = {"investigation_id": investigation_id} if investigation_id else {}
+    docs = list(db["artifacts"].find(query, {"_id": 0}).sort("created_at", -1).limit(200))
+    return {"artifacts": docs}
+
+
+def _get_artifact_file(gridfs_id: str):
+    from bson import ObjectId
+
+    db, fs = _artifacts_db()
+    if fs is None:
+        raise HTTPException(status_code=503, detail="MongoDB not configured")
+    try:
+        return fs.get(ObjectId(gridfs_id))
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Artifact not found: {gridfs_id}")
+
+
+@app.get("/artifacts/{gridfs_id}/download")
+async def download_artifact(gridfs_id: str):
+    """Download an artifact as a file attachment."""
+    gf = _get_artifact_file(gridfs_id)
+    filename = (gf.filename or "artifact").split("/")[-1]
+    return StreamingResponse(
+        iter([gf.read()]),
+        media_type=gf.content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/artifacts/{gridfs_id}/raw")
+async def raw_artifact(gridfs_id: str):
+    """Serve an artifact inline — used for <img> previews of chart PNGs."""
+    gf = _get_artifact_file(gridfs_id)
+    return StreamingResponse(
+        iter([gf.read()]),
+        media_type=gf.content_type or "application/octet-stream",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 # ── Public API used by sandbox.py ────────────────────────────────────────────
 
 def emit(kind: str, text: str, agent: str = "") -> None:
