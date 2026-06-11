@@ -56,7 +56,7 @@ export function ConfigDialog({
 
     onSave({
       deploymentUrl: normalizedUrl,
-      assistantId: initialConfig?.assistantId || "lucid_agent",
+      assistantId: initialConfig?.assistantId || "financial_copilot",
       langsmithApiKey: langsmithApiKey || undefined,
     });
     onOpenChange(false);

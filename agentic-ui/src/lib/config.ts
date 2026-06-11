@@ -10,10 +10,9 @@ export const AGENT_MODES = [
 
 const CONFIG_STORAGE_KEY = "standalone-chat-config";
 
-import { ENV_CONFIG, getAppEnv, getLocalDeploymentUrl } from "@/app/utils/mlConfig";
 
 function getDefaultDeploymentUrl(): string {
-  return "http://127.0.0.1:2024";
+  return "https://financial-ai-copilot.onrender.com";
 }
 
 const DEFAULT_ASSISTANT_ID = "financial_copilot";
