@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from deepagent_copilot.ai_agent.backend.graphs import GRAPH_REGISTRY
+from ..graphs import GRAPH_REGISTRY
 
 router = APIRouter(tags=["System"])
 
@@ -15,7 +15,7 @@ def _langgraph_version() -> str:
 @router.get("/ok")
 async def health_check(check_db: int = Query(default=0)):
     if check_db:
-        import deepagent_copilot.ai_agent.backend.database as db
+        from .. import database as db
         try:
             async with db._conn() as conn:
                 await conn.execute("SELECT 1")

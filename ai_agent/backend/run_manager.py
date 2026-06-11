@@ -5,7 +5,7 @@ import asyncio
 import logging
 from typing import Any
 
-from deepagent_copilot.ai_agent.backend.database import update_run_status, set_thread_status, update_thread_snapshot
+from .database import update_run_status, set_thread_status, update_thread_snapshot
 
 log = logging.getLogger("run_manager")
 
@@ -54,7 +54,7 @@ async def _execute(
     input_data: Any,
     config: dict,
 ) -> None:
-    from deepagent_copilot.ai_agent.backend.streaming import stream_graph, _sse, _serialize
+    from .streaming import stream_graph, _sse, _serialize
 
     _replay[run_id] = []
 
@@ -98,14 +98,14 @@ async def _execute(
     except asyncio.CancelledError:
         await update_run_status(run_id, "interrupted")
         await set_thread_status(thread_id, "interrupted")
-        from deepagent_copilot.ai_agent.backend.streaming import _sse as _sse2
+        from .streaming import _sse as _sse2
         _publish(run_id, _sse2("end", {}))
     except Exception as e:
         log.exception("run failed  run_id=%s  thread_id=%s", run_id, thread_id)
         await update_run_status(run_id, "error")
         await set_thread_status(thread_id, "error")
         await update_thread_snapshot(thread_id, None, {}, str(e).encode())
-        from deepagent_copilot.ai_agent.backend.streaming import _sse as _sse3
+        from .streaming import _sse as _sse3
         _publish(run_id, _sse3("error", {"message": str(e)}))
         _publish(run_id, _sse3("end", {}))
     finally:

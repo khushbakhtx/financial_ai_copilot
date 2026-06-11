@@ -1,14 +1,14 @@
 from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
-from deepagent_copilot.ai_agent.backend.models import (
+from ..models import (
     Thread, ThreadCreate, ThreadPatch,
     ThreadSearchRequest, ThreadCountRequest,
     ThreadPruneRequest, ThreadPruneResponse,
     ThreadState, ThreadStateUpdate, ThreadStateUpdateResponse,
     ThreadStateSearch, CheckpointConfig,
 )
-import deepagent_copilot.ai_agent.backend.database as db
-from deepagent_copilot.ai_agent.backend.graphs import get_graph
+from .. import database as db
+from ..graphs import get_graph
 
 router = APIRouter(prefix="/threads", tags=["Threads"])
 
@@ -138,7 +138,7 @@ async def get_thread_state(thread_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    from deepagent_copilot.ai_agent.backend.streaming import _serialize
+    from ..streaming import _serialize
 
     interrupts = []
     tasks_out = []
@@ -206,7 +206,7 @@ async def get_thread_state_at_checkpoint(thread_id: str, checkpoint_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    from deepagent_copilot.ai_agent.backend.streaming import _serialize
+    from ..streaming import _serialize
     return ThreadState(
         values=_serialize(snapshot.values),
         next=list(snapshot.next or []),
@@ -250,7 +250,7 @@ async def get_thread_history(thread_id: str, body: Optional[ThreadStateSearch] =
             configurable["checkpoint_ns"] = body.before.checkpoint_ns
         before_config = {"configurable": configurable}
 
-    from deepagent_copilot.ai_agent.backend.streaming import _serialize
+    from ..streaming import _serialize
 
     def _serialize_tasks(tasks) -> list:
         result = []
@@ -297,7 +297,7 @@ async def get_thread_history(thread_id: str, body: Optional[ThreadStateSearch] =
 async def stream_thread(thread_id: str):
     """Reconnect endpoint — returns current thread state as a single SSE snapshot."""
     from fastapi.responses import StreamingResponse
-    from deepagent_copilot.ai_agent.backend.streaming import _sse
+    from ..streaming import _sse
 
     thread = await db.get_thread(thread_id)
     if not thread:

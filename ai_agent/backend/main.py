@@ -18,8 +18,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from deepagent_copilot.ai_agent.backend.graphs import setup_checkpointer
-import deepagent_copilot.ai_agent.backend.database as database
+from .graphs import setup_checkpointer
+from . import database
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,7 +110,7 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-from deepagent_copilot.ai_agent.backend.routers import assistants, runs, stateless, store, system, threads
+from .routers import assistants, runs, stateless, store, system, threads
 
 app.include_router(system.router)
 app.include_router(assistants.router)

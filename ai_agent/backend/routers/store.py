@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException, Response
-from deepagent_copilot.ai_agent.backend.models import (
+from ..models import (
     Item, StorePutRequest, StoreDeleteRequest,
     StoreSearchRequest, StoreListNamespacesRequest,
     SearchItemsResponse, ListNamespaceResponse,
 )
-import deepagent_copilot.ai_agent.backend.database as db
+from .. import database as db
 
 router = APIRouter(prefix="/store", tags=["Store"])
 

@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir uv
 
 # Copy dependency manifests first for layer caching
-COPY pyproject.toml uv.lock /app/
+COPY pyproject.toml /app/
 
 # Install all dependencies declared in the root pyproject.toml
 RUN uv pip install --system --no-cache-dir \
@@ -40,6 +40,11 @@ RUN uv pip install --system --no-cache-dir \
     "e2b-code-interpreter>=2.4.1" \
     "great-expectations>=1.0.0" \
     "websockets>=12.0" \
+    "motor>=3.4.0" \
+    "pymongo[srv]>=4.7.0" \
+    "langgraph-checkpoint-mongodb>=0.1.0" \
+    "python-multipart>=0.0.9" \
+    "langchain-google-genai>=2.0.0"
 
 # Copy the full ai_agent directory:
 #   agent.py, agent_auto.py, langgraph.json, ai_agent/, backend/, pyproject.toml, ...
@@ -52,9 +57,9 @@ COPY . /app/
 # Install the ai_agent package so `from ai_agent.tools import ...` resolves
 RUN uv pip install --system --no-cache-dir --no-deps -e /app
 
-# backend/ is the working directory; graphs.py walks up one level to find langgraph.json
-WORKDIR /app/backend
+# Run from /app so backend is importable as a package (needed for relative imports)
+WORKDIR /app
 
 EXPOSE 8123
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8123"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8123"]

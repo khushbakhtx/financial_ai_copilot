@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException
-from deepagent_copilot.ai_agent.backend.models import (
+from ..models import (
     Assistant, AssistantCreate, AssistantPatch,
     AssistantSearchRequest, AssistantCountRequest,
 )
-import deepagent_copilot.ai_agent.backend.database as db
+from .. import database as db
 
 router = APIRouter(prefix="/assistants", tags=["Assistants"])
 
@@ -83,7 +83,7 @@ async def get_assistant_graph(assistant_id: str):
     row = await db.get_assistant(assistant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Assistant not found")
-    from deepagent_copilot.ai_agent.backend.graphs import get_graph
+    from ..graphs import get_graph
     try:
         graph = get_graph(row["graph_id"])
     except ValueError as e:
