@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mongodb": {
+      "command": "npx",
+      "args": ["-y", "mongodb-mcp-server@latest"],
+      "env": {
+        "MDB_MCP_CONNECTION_STRING": "mongodb+srv://khushbakhtdev_db_user:XA7JSLtVyocJL8Al@cluster1.pttkvtd.mongodb.net/financial_ai_copilot?appName=Cluster1"
+      }
+    }
+  }
+}

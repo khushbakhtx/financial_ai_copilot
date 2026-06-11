@@ -1,0 +1,35 @@
+# Virtual envs / caches
+.venv
+__pycache__
+*.py[cod]
+*.egg-info/
+uv.lock
+.uv/
+
+# Secrets — supply at runtime via env vars, never bake into the image
+.env
+.env.*
+
+# Version control / editor
+.git
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Node / frontend
+node_modules
+deep-agents-ui/
+
+# Jupyter / tests
+*.ipynb
+.ipynb_checkpoints/
+test*.py
+tests/
+
+# LangGraph CLI artifacts (we run our own backend, not langgraph up)
+.langgraph/
+
+# Docs
+Deployment.md
+FEEDBACK.md

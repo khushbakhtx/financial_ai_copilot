@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "financial_copilot": "./agent.py:agent"
+  },
+  "env": ".env"
+}

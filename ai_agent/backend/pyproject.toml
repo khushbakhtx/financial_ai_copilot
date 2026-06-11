@@ -1,0 +1,46 @@
+[tool.poetry]
+name = "lucid-agent-backend"
+version = "0.1.0"
+description = "Self-hosted LangGraph-compatible FastAPI backend for Lucid Agent"
+package-mode = false   # service, not a library
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+
+# ── FastAPI server ─────────────────────────────────────────────────────────
+fastapi          = ">=0.115.0"
+uvicorn          = { extras = ["standard"], version = ">=0.30.0" }
+httpx            = ">=0.27.0"
+python-dotenv    = ">=1.0.0"
+
+# ── PostgreSQL — metadata DB + LangGraph checkpoint store ─────────────────
+asyncpg                        = ">=0.29.0"
+langgraph-checkpoint-postgres  = ">=2.0.0"
+psycopg                        = { extras = ["binary", "pool"], version = ">=3.1.1" }
+
+# ── LangGraph / LangChain ─────────────────────────────────────────────────
+langgraph            = ">=0.3.0"
+langchain            = ">=0.3.0"
+langchain-core       = ">=0.3.0"
+langchain-openai     = ">=1.0.2"
+langchain-google-genai = ">=2.0.0"
+
+# ── Agent framework ────────────────────────────────────────────────────────
+deepagents  = ">=0.4.5"
+pydantic    = ">=2.0.0"
+rich        = ">=14.0.0"
+
+# ── Agent tool runtime dependencies ───────────────────────────────────────
+requests            = ">=2.31.0"
+pandas              = ">=2.0.0"
+scipy               = ">=1.11.0"
+scikit-learn        = ">=1.4.0"
+pypdf               = ">=3.17.0"
+beautifulsoup4      = ">=4.12.0"
+pymupdf             = ">=1.26.7"
+e2b-code-interpreter = ">=2.4.1"
+great-expectations  = ">=1.0.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
